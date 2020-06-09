@@ -1,7 +1,10 @@
-Nt = 3677;                 %Step Size of time
-ti = 0;                   %Initial time (sec)
-tf = 14.708;                  %Final time (sec)
-t = linspace(ti,tf,Nt);   %Time vector (sec)
+%extract real data
+D = readtable('smooth_data.csv');
+timeA = D{:,1};
+speedA = D{:,2};
+smooth_data = [timeA,speedA];
+
+t = timeA;   %Time vector (sec)
 
 %% geometric parameters of the paperfuge system
 Rr = 0.0375e-2;       % [logspace(-8,0,9),0.0375e-2];         %Radius of string (m)
@@ -44,44 +47,6 @@ v1 = 300;
 %convert angular velocity from rad/sec to rpm
 phi(:,2) = (phi(:,2).*60)./(2*pi);
 
-%% plot velocity figures
-figure(1);
-plot(time,abs(phi(:,2)))
-ylabel('Angular Velocity (RPM)')
-xlabel('Time (s)')
-title('Theoretical Velocity vs Experimental Velocity')
-
-%overaly actual data on theoretical data
-hold on
-plot(smooth_data(:,1),smooth_data(:,2),'r');
-hold off
-
-%to compare different values of I and Rr to the max velocity
-
-% maxV = zeros(1,length(I));
-% for i = 1:length(I)
-%     [time,phi,phiMax,phiratio,phiCrit] = solveODE_buzzbutton(t,Rr(10),Rhw,l,I(i),Rfw,w,aR,k,inputForceList,gamma,x1,v1);
-%     maxV(i) = max(phi(:,2));
-% end
-% figure(2);
-% semilogx(I,maxV)
-% ylabel('Maximum Velocity (rad/sec')
-% xlabel('Moment of Inertia (kg*m^2)')
-% title('Max Velocity vs Moment of Inertia (I)')
-% 
-% x1R = zeros(1,length(Rr));
-% for i = 1:length(Rr)
-%     x1R(i) = (sind(38)*l - Rhw)/Rr(i);
-%     [time,phi,phiMax,phiratio,phiCrit] = solveODE_buzzbutton(t,Rr(i),Rhw,l,I(8),Rfw,w,aR,k,inputForceList,gamma,x1R(i),v1);
-%     maxV(i) = max(phi(:,2));
-% end 
-
-% figure(3);
-% semilogx(Rr,maxV)
-% ylabel('Maximum Velocity (rad/sec')
-% xlabel('String Radius (m)')
-% title('Max Velocity vs String Radius')
-
 %% plot torque figures
 theta = zeros(length(time),1);
 nowF = zeros(length(time),1);
@@ -109,9 +74,11 @@ for i = 1:length(time)
     if abs(phi(i,1))<phiCrit
         Tinput(i) = -sign(phi(i,1))*2*Rr*nowF(i)*(abs(phi(i,1))*Rr + Rhw)/(l^2 - (abs(phi(i,1))*Rr + Rhw)^2)^(1/2);
     else
-        Tinput(i) = -sign(phi(i,1))*2*Rr*nowF(i)*tan(thetaCrit); %inputTorque fixed with theta of thetaCrit
+        Tinput(i) = -sign(phi(i,1))*2*Rr*nowF(i)*tan(acos(2/pi)); %inputTorque fixed with theta of thetaCrit = acos(2/pi)
     end
-    Ttwist(i) = -sign(phi(i,1))*(1/gamma)*(phiMax-phiCrit)^(gamma+1)*((1/((phiMax-abs(phi(i,1)))^gamma))-(1/(phiMax)^gamma));
+    A = (k/gamma)*((phiMax-phiCrit)^(gamma+1));
+    Ttwist(i) = -sign(phi(i,1))*A*(1/((phiMax-abs(phi(i,1)))^(gamma) - (phiMax)^-(gamma)));
+    
     Tdrag(i) = -sign(phi(i,2))*aR*((((4*pi)/5)*Rfw^5)+(2*pi*w*Rfw^4))*phi(i,2)^2;
     
     %to look at gamma
@@ -120,8 +87,9 @@ for i = 1:length(time)
 end
 
 %overlay plot of different torques --> theoretical
-figure(4);
+figure(1);
 plot(time,Tinput,'b')
+ylim([-0.1 0.1]);
 ylabel('Torque (N*m)')
 xlabel('Time (s)')
 title('Torque vs Time (Theoretical Case)')
@@ -131,10 +99,10 @@ plot(time,Tdrag,'g')
 plot(time,Ttwist,'r')
 hold off 
 
-%overlay plot of different torques --> experimental
+legend('input Torque','drag Torque','twist Torque');
 
 %looking at gamma
-figure(5);
+figure(2);
 plot(ratio,Ttwist)
 ylabel('Twist Torque (N*m)')
 xlabel('phi/phiMax')
@@ -144,6 +112,9 @@ plot(phiratio*ones(size(Ttwist)),Ttwist,'k')
 hold off
 
 %% plot power figures and calculate energy
+%convert angular velocity from rad/sec to rpm
+phi(:,2) = (phi(:,2).*60)./(2*pi);
+
 % power calculations
 N = 50; %number of turns
 A = pi*(.03/2)^2; % in m^2
@@ -151,10 +122,10 @@ B = 0.8; % in T
 Nc = 6; %number of coils
 R = 130; % in milliOhms
 C = 0.011*((N*A*B*Nc)^2)/R;
-Ptheory = (phi(:,2).^2).*C; %have to convert angular velocity from rad/sec to rpm
+Ptheory = (phi(:,2).^2).*C; 
 Pactual = ((smooth_data(:,2)).^2).*C;
 
-figure(6);
+figure(3);
 plot(time,Ptheory)
 ylabel('Power (W)')
 xlabel('Time (s)')
@@ -166,24 +137,127 @@ plot(smooth_data(:,1),Pactual,'r');
 
 hold off
 
-%calculate electrical energy generation based on area under the curve
+%calculate energy generation based on area under the curve
 Etheory = trapz(time,Ptheory);
 Eactual = trapz(smooth_data(:,1),Pactual);
 
 fprintf('The theoretical energy output is %.3f Joules. The experimental energys output is %.3f Joules\n',Etheory,Eactual);
 
-%% examine fitting parameters by comparing the theoretical velocity to the experimental
-figure(7)
+%% plot velocity figures
+figure(4);
 plot(time,abs(phi(:,2)))
 ylabel('Angular Velocity (RPM)')
 xlabel('Time (s)')
-title('Changing aR from .003 to 3')
+title('Theoretical Velocity vs Experimental Velocity')
 
-aR = 3;
-[time,phi,phiMax,phiratio,phiCrit] = solveODE_buzzbutton(t,Rr,Rhw,l,I,Rfw,w,aR,k,inputForceList,gamma,x1,v1);
-phi(:,2) = (phi(:,2).*60)./(2*pi);
-
+%overaly actual data on theoretical data
 hold on
-plot(time,abs(phi(:,2)),'g');
 plot(smooth_data(:,1),smooth_data(:,2),'r');
-hold off 
+hold off
+
+%looking at just the 5th peak
+V = readtable('smooth5.csv');
+time5 = V{:,1};
+speed5 = V{:,2};
+smooth5 = [time5,speed5];
+
+figure(5)
+plot(smooth5(:,1),phi(1874:2315,2))
+ylabel('Angular Velocity (RPM)')
+xlabel('Time (s)')
+title('Theoretical Velocity vs Experimental Velocity for the 5th peak')
+
+hold on 
+plot(smooth5(:,1),smooth5(:,2),'r')
+hold off
+
+legend('theoretical velocity','experimental velocity');
+
+%to compare different parameters to the max/min velocity
+
+% I = [logspace(-8,-2,7),9.4144e-05];
+% maxV = zeros(1,length(I));
+% for i = 1:length(I)
+%     [time,phi,phiMax,phiratio,phiCrit] = solveODE_buzzbutton(t,Rr(10),Rhw,l,I(i),Rfw,w,aR,k,inputForceList,gamma,x1,v1);
+%     maxV(i) = max(phi(:,2));
+% end
+% figure(6);
+% semilogx(I,maxV)
+% ylabel('Maximum Velocity (rad/sec')
+% xlabel('Moment of Inertia (kg*m^2)')
+% title('Max Velocity vs Moment of Inertia (I)')
+% 
+
+% Rr = [logspace(-8,0,9),0.0375e-2];
+% x1R = zeros(1,length(Rr));
+% for i = 1:length(Rr)
+%     x1R(i) = (sind(38)*l - Rhw)/Rr(i);
+%     [time,phi,phiMax,phiratio,phiCrit] = solveODE_buzzbutton(t,Rr(i),Rhw,l,I(8),Rfw,w,aR,k,inputForceList,gamma,x1R(i),v1);
+%     maxV(i) = max(phi(:,2));
+% end 
+
+% figure(7);
+% semilogx(Rr,maxV)
+% ylabel('Maximum Velocity (rad/sec')
+% xlabel('String Radius (m)')
+% title('Max Velocity vs String Radius')
+
+% Rfw = [logspace(-8,0,9),4.1275e-2];
+% maxV = zeros(1,length(Rfw));
+% minV = zeros(1,length(Rfw));
+% for i = 1:length(Rfw)
+%     [time,phi] = solveODE_buzzbutton(t,Rr,Rhw,l,I,Rfw(i),w,aR,k,inputForceList,gamma,x1,v1);
+%     maxV(i) = max(phi(:,2));
+%     minV(i) = min(phi(:,2));
+% end 
+% 
+% figure(8);
+% semilogx(Rfw,maxV)
+% ylabel('Maximum Velocity (rad/sec)')
+% xlabel('Radius of Disk (m)')
+% title('Max Velocity vs Radius of Disk')
+% 
+% figure(9);
+% semilogx(Rfw,minV)
+% ylabel('Minimum Velocity (rad/sec)')
+% xlabel('Radius of Disk (m)')
+% title('Min Velocity vs Radius of Disk')
+% 
+% %compare distance between com and string hole (1/2 Rw) to the max velocity
+% Rfw = 4.1275e-2;
+% Rw = [logspace(-8,5,14),(0.508e-2)/2];
+% maxV = zeros(1,length(Rw));
+% for i = 1:length(Rw)
+%     [time,phi] = solveODE_buzzbutton(t,Rr,(Rw(i)+Rh),l,I,Rfw,w,aR,k,inputForceList,gamma,x1,v1);
+%     maxV(i) = max(phi(:,2));
+% end
+% figure(10);
+% semilogx(Rw,maxV)
+% ylabel('Maximum Velocity (rad/sec')
+% xlabel('Distance Between Com and String Hole (1/2 Rw) (m)')
+% title('Max Velocity vs 1/2 Rw')
+
+%% look at phi max and phi crit experimentally and theoretically
+phicrit_actual = str2double(D{(1:1:7),6});
+phicrit_actual = phicrit_actual.*(2*pi); %convert from rotations to radians
+thetacrit_actual = asin((phicrit_actual.*Rr)+Rhw)./l;
+phimax_actual = sin(thetacrit_actual).*(l-Rhw)./Rr;
+phimax_actual = phimax_actual./(2*pi); %convert back to rotations
+
+%% examine fitting parameters by comparing the theoretical velocity to the experimental
+% figure(11)
+% plot(time,abs(phi(:,2)))
+% ylabel('Angular Velocity (RPM)')
+% xlabel('Time (s)')
+% title('Changing aR from 0.003 to 3e-6')
+% 
+% aR = 3e-6;
+% [time,phi] = solveODE_buzzbutton(t,Rr,Rhw,l,I,Rfw,w,aR,k,inputForceList,gamma,x1,v1);
+% phi(:,2) = (phi(:,2).*60)./(2*pi);
+% 
+% hold on
+% plot(time,abs(phi(:,2)),'g');
+% plot(smooth_data(:,1),smooth_data(:,2),'r');
+% hold off 
+% legend('theoretical data, aR=0.003','theoretical data, aR=3e-6','experimental data');
+
